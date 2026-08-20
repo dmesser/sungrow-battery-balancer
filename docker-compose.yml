@@ -1,0 +1,30 @@
+services:
+  battery-balancer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/dmesser/sungrow-battery-balancer:latest
+    container_name: sungrow-battery-balancer
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Alternatively define environment variables directly:
+    # environment:
+    #   - INFLUXDB_URL=https://influxdb.example.com:8086
+    #   - INFLUXDB_USER=pv-monitoring-user
+    #   - INFLUXDB_PASSWORD=your_influx_password
+    #   - INFLUXDB_DB=pv_monitoring
+    #   - INVERTER_HOSTS=192.168.1.8:502,192.168.1.75:502
+    #   - GRAFANA_URL=https://grafana.example.com
+    #   - GRAFANA_TOKEN=your_grafana_token
+    #   - GRAFANA_DASHBOARD_UID=l1PwaTigk
+    #   - GRAFANA_PANEL_ID=2
+    #   - REDUCED_CHARGING_POWER=1.0
+    #   - MAX_CHARGING_POWER=10.6
+    #   - CHECK_INTERVAL=60
+    #   - LOG_LEVEL=INFO
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

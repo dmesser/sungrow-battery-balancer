@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sungrow-battery-balancer"
+version = "1.0.0"
+description = "Dynamic maximum charging power balancer for Sungrow SBR256 battery and SH10RT-20 inverters"
+readme = "README.md"
+authors = [
+    { name = "dmesser" }
+]
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+dependencies = [
+    "pymodbus>=3.7.0",
+    "requests>=2.31.0",
+    "urllib3>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+sungrow-battery-balancer = "sungrow_battery_balancer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sungrow_battery_balancer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

@@ -30,6 +30,7 @@ def mock_config():
         reduced_charging_power=1.0,
         max_charging_power=10.6,
         check_interval=1,
+        state_file="",  # Disable persistence in tests to avoid reading real /tmp state
     )
 
 
@@ -87,6 +88,65 @@ class TestBatteryBalancer:
         assert result2.grafana_annotated is False
         balancer.modbus_controller.write_max_charging_power.assert_not_called()
         balancer.grafana_client.create_annotation.assert_not_called()
+
+    def test_soc_remains_at_100_percent_skips_consecutive_writes(self, balancer):
+        # Cycle 1: Battery reaches 100% SoC (coming from throttled state 1.0 kW)
+        balancer.current_power_kw = 1.0
+        balancer.influx_client.fetch_battery_soc.return_value = 100.0
+
+        result1 = balancer.run_once()
+        assert result1.decision.target_power_kw == 10.6
+        assert result1.decision.state_changed is True
+        assert result1.modbus_written is True
+        assert balancer.current_power_kw == 10.6
+
+        balancer.modbus_controller.write_max_charging_power.reset_mock()
+        balancer.grafana_client.create_annotation.reset_mock()
+
+        # Cycle 2: Battery remains at 100% SoC
+        balancer.influx_client.fetch_battery_soc.return_value = 100.0
+        result2 = balancer.run_once()
+
+        assert result2.decision.target_power_kw == 10.6
+        assert result2.decision.state_changed is False
+        assert result2.modbus_written is False
+        assert result2.grafana_annotated is False
+        assert "already set" in result2.decision.reason.lower()
+        balancer.modbus_controller.write_max_charging_power.assert_not_called()
+        balancer.grafana_client.create_annotation.assert_not_called()
+
+        # Cycle 3: Still 100% SoC
+        result3 = balancer.run_once()
+        assert result3.decision.state_changed is False
+        assert result3.modbus_written is False
+        balancer.modbus_controller.write_max_charging_power.assert_not_called()
+
+    def test_persistent_state_loaded_from_file(self, mock_config, mocker, tmp_path):
+        state_file = tmp_path / "state.json"
+        state_file.write_text('{"current_power_kw": 10.6, "last_soc": 100.0}')
+        mock_config.state_file = str(state_file)
+
+        mock_influx = mocker.create_autospec(InfluxClient, instance=True)
+        mock_modbus = mocker.create_autospec(SungrowModbusController, instance=True)
+        mock_grafana = mocker.create_autospec(GrafanaClient, instance=True)
+        mock_influx.fetch_battery_soc.return_value = 100.0
+
+        # Create new balancer instance (simulating daemon restart)
+        new_balancer = BatteryBalancer(
+            config=mock_config,
+            influx_client=mock_influx,
+            modbus_controller=mock_modbus,
+            grafana_client=mock_grafana,
+        )
+
+        assert new_balancer.current_power_kw == 10.6
+
+        # Running once with 100% SoC will recognize state was already 10.6 kW and skip writes!
+        result = new_balancer.run_once()
+        assert result.decision.state_changed is False
+        assert result.modbus_written is False
+        mock_modbus.write_max_charging_power.assert_not_called()
+        mock_grafana.create_annotation.assert_not_called()
 
     def test_soc_rises_above_85_triggers_power_reduction(self, balancer):
         balancer.current_power_kw = 10.6

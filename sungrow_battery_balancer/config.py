@@ -67,6 +67,7 @@ class Config:
     dry_run: bool = False
     one_shot: bool = False
     set_power: float | None = None  # Explicit target power in kW for one-shot mode
+    state_file: str = "/tmp/sungrow_balancer_state.json"
 
     @property
     def effective_modbus_register(self) -> int:
@@ -154,6 +155,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=".env",
         metavar="PATH",
         help="Path to .env configuration file (default: .env).",
+    )
+    mode_group.add_argument(
+        "--state-file",
+        type=str,
+        dest="state_file",
+        default=None,
+        metavar="PATH",
+        help="Path to state cache file for persistence across runs (env: STATE_FILE, default: /tmp/sungrow_balancer_state.json).",
     )
     mode_group.add_argument(
         "-1",
@@ -364,7 +373,6 @@ def load_config(
         file_env = load_dotenv_file(dotenv_path)
         environ = {**file_env, **dict(os.environ)}
 
-
     # Helper to resolve value: CLI > Env > Default
     def get_val(cli_val, env_key: str, default=None):
         if cli_val is not None:
@@ -485,6 +493,9 @@ def load_config(
     dry_run = bool(parsed_args.dry_run or str_to_bool(environ.get("DRY_RUN"), default=False))
     one_shot = bool(parsed_args.one_shot or str_to_bool(environ.get("ONE_SHOT"), default=False))
     set_power = parsed_args.set_power
+    state_file = str(
+        get_val(parsed_args.state_file, "STATE_FILE", default="/tmp/sungrow_balancer_state.json")
+    )
 
     if missing_items:
         _print_missing_config_error(missing_items)
@@ -516,6 +527,7 @@ def load_config(
         dry_run=dry_run,
         one_shot=one_shot,
         set_power=set_power,
+        state_file=state_file,
     )
 
 

@@ -52,13 +52,21 @@ class TestEvaluateSoc:
         assert decision.target_power_kw == 1.0
         assert decision.state_changed is True
 
-    def test_soc_at_full_threshold(self):
-        # 100.0% SoC -> Restore max power 10.6 kW
+    def test_soc_at_full_threshold_first_time(self):
+        # 100.0% SoC when previous power was 1.0 kW -> State changed to 10.6 kW
         decision = evaluate_soc(soc=100.0, current_power_kw=1.0)
         assert decision.target_power_kw == 10.6
         assert decision.register_raw_value == 1060
         assert decision.state_changed is True
-        assert "full" in decision.reason.lower()
+        assert "setting max charging power" in decision.reason.lower()
+
+    def test_soc_remains_at_full_consecutive_cycle(self):
+        # 100.0% SoC when previous power was ALREADY 10.6 kW -> State NOT changed
+        decision = evaluate_soc(soc=100.0, current_power_kw=10.6)
+        assert decision.target_power_kw == 10.6
+        assert decision.register_raw_value == 1060
+        assert decision.state_changed is False
+        assert "already set" in decision.reason.lower()
 
     def test_hysteresis_when_charging_up(self):
         # Previous state was 10.6 kW, SoC rises to 82.0% (between 80% and 85%) -> stays 10.6 kW

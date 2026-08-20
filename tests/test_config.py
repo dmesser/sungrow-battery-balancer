@@ -67,7 +67,7 @@ class TestHelpers:
         env_file.write_text(
             "# Comment line\n"
             "KEY1=value1\n"
-            "KEY2=\"quoted_value\"\n"
+            'KEY2="quoted_value"\n'
             "KEY3='single_quoted'\n"
             "INVALID_LINE\n"
             "KEY4=val with spaces\n"
@@ -81,7 +81,6 @@ class TestHelpers:
 
         # Non-existent file
         assert load_dotenv_file(str(tmp_path / "non_existent.env")) == {}
-
 
 
 class TestLoadConfig:

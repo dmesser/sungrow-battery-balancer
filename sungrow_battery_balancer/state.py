@@ -62,33 +62,60 @@ def evaluate_soc(
     """
     if soc >= full_threshold:
         target_power = max_power_kw
-        reason = (
-            f"Battery SoC is full ({soc:.1f}% >= {full_threshold:.1f}%). "
-            f"Setting max charging power to {max_power_kw:.1f} kW."
-        )
     elif soc >= high_threshold:
         target_power = reduced_power_kw
-        reason = (
-            f"Battery SoC is high ({soc:.1f}% >= {high_threshold:.1f}%). "
-            f"Throttling max charging power to {reduced_power_kw:.1f} kW."
-        )
     elif soc < low_threshold:
         target_power = max_power_kw
-        reason = (
-            f"Battery SoC is low ({soc:.1f}% < {low_threshold:.1f}%). "
-            f"Setting max charging power to {max_power_kw:.1f} kW."
-        )
+    else:
+        # In hysteresis deadband [low_threshold, high_threshold)
+        target_power = current_power_kw if current_power_kw is not None else max_power_kw
+
+    state_changed = current_power_kw is None or not math.isclose(
+        current_power_kw, target_power, abs_tol=0.001
+    )
+
+    if soc >= full_threshold:
+        if state_changed:
+            reason = (
+                f"Battery SoC is full ({soc:.1f}% >= {full_threshold:.1f}%). "
+                f"Setting max charging power to {max_power_kw:.1f} kW."
+            )
+        else:
+            reason = (
+                f"Battery SoC is full ({soc:.1f}% >= {full_threshold:.1f}%). "
+                f"Charging power is already set to {max_power_kw:.1f} kW."
+            )
+    elif soc >= high_threshold:
+        if state_changed:
+            reason = (
+                f"Battery SoC is high ({soc:.1f}% >= {high_threshold:.1f}%). "
+                f"Throttling max charging power to {reduced_power_kw:.1f} kW."
+            )
+        else:
+            reason = (
+                f"Battery SoC is high ({soc:.1f}% >= {high_threshold:.1f}%). "
+                f"Charging power is already throttled to {reduced_power_kw:.1f} kW."
+            )
+    elif soc < low_threshold:
+        if state_changed:
+            reason = (
+                f"Battery SoC is low ({soc:.1f}% < {low_threshold:.1f}%). "
+                f"Setting max charging power to {max_power_kw:.1f} kW."
+            )
+        else:
+            reason = (
+                f"Battery SoC is low ({soc:.1f}% < {low_threshold:.1f}%). "
+                f"Charging power is already set to {max_power_kw:.1f} kW."
+            )
     else:
         # In hysteresis deadband [low_threshold, high_threshold)
         if current_power_kw is not None:
-            target_power = current_power_kw
             reason = (
                 f"Battery SoC ({soc:.1f}%) is in hysteresis band "
                 f"[{low_threshold:.1f}%, {high_threshold:.1f}%). "
                 f"Maintaining current charging power at {current_power_kw:.1f} kW."
             )
         else:
-            target_power = max_power_kw
             reason = (
                 f"Battery SoC ({soc:.1f}%) is in hysteresis band "
                 f"[{low_threshold:.1f}%, {high_threshold:.1f}%) with no previous state. "
@@ -96,9 +123,6 @@ def evaluate_soc(
             )
 
     register_raw = power_kw_to_register_value(target_power)
-    state_changed = current_power_kw is None or not math.isclose(
-        current_power_kw, target_power, abs_tol=0.001
-    )
 
     return BatteryDecision(
         soc=soc,

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import signal
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from .config import Config, print_config_summary
 from .grafana import GrafanaAnnotationError, GrafanaClient
@@ -43,6 +46,8 @@ class BatteryBalancer:
         self.current_power_kw: float | None = None
         self._stop_event = threading.Event()
 
+        self._load_state()
+
         self.influx_client = influx_client or InfluxClient(
             url=config.influxdb_url,
             user=config.influxdb_user,
@@ -66,6 +71,46 @@ class BatteryBalancer:
             dashboard_uid=config.grafana_dashboard_uid,
             panel_id=config.grafana_panel_id,
         )
+
+    def _load_state(self) -> None:
+        """Load last set charging power from persistent state file if available."""
+        if not self.config.state_file or not os.path.exists(self.config.state_file):
+            return
+        try:
+            with open(self.config.state_file, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and "current_power_kw" in data:
+                self.current_power_kw = float(data["current_power_kw"])
+                logger.info(
+                    "Loaded persistent state: current charging power is %.2f kW (last recorded SoC: %s%%)",
+                    self.current_power_kw,
+                    data.get("last_soc", "N/A"),
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Could not load persistent state from %s: %s", self.config.state_file, exc
+            )
+
+    def _save_state(self, power_kw: float, soc: float) -> None:
+        """Save current charging power and SoC to persistent state file."""
+        if not self.config.state_file:
+            return
+        state_data = {
+            "current_power_kw": power_kw,
+            "last_soc": soc,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            state_dir = os.path.dirname(self.config.state_file)
+            if state_dir:
+                os.makedirs(state_dir, exist_ok=True)
+            tmp_file = f"{self.config.state_file}.tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(state_data, f, indent=2)
+            os.replace(tmp_file, self.config.state_file)
+            logger.debug("Saved state to %s: %s", self.config.state_file, state_data)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not save persistent state to %s: %s", self.config.state_file, exc)
 
     def run_once(self, force_power_kw: float | None = None) -> BalancerIterationResult:
         """Execute a single monitoring and balancing cycle.
@@ -140,8 +185,10 @@ class BatteryBalancer:
             except GrafanaAnnotationError as exc:
                 logger.warning("Failed to create Grafana annotation (non-fatal): %s", exc)
 
-            # Update tracked power
+            # Update tracked power and save state
             self.current_power_kw = decision.target_power_kw
+            if not self.config.dry_run:
+                self._save_state(power_kw=decision.target_power_kw, soc=soc)
         else:
             logger.info(
                 "SoC is %.1f%% (Charging power remains %.2f kW). No change required.",

@@ -125,7 +125,7 @@ class BatteryBalancer:
 
         # 1. Read SoC from InfluxDB
         soc = self.influx_client.fetch_battery_soc()
-        logger.info("Current battery State-of-Charge (SoC): %.1f%%", soc)
+        logger.debug("Current battery State-of-Charge (SoC): %.1f%%", soc)
 
         # 2. Evaluate State & Target Power
         if force_power_kw is not None:
@@ -190,7 +190,7 @@ class BatteryBalancer:
             if not self.config.dry_run:
                 self._save_state(power_kw=decision.target_power_kw, soc=soc)
         else:
-            logger.info(
+            logger.debug(
                 "SoC is %.1f%% (Charging power remains %.2f kW). No change required.",
                 soc,
                 decision.target_power_kw,

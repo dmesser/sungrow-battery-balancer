@@ -5,6 +5,7 @@ import pytest
 from sungrow_battery_balancer.config import (
     InverterHost,
     load_config,
+    load_dotenv_file,
     mask_secret,
     parse_inverter_hosts,
     print_config_summary,
@@ -60,6 +61,27 @@ class TestHelpers:
         assert mask_secret("") == "<not set>"
         assert mask_secret("abc") == "****"
         assert mask_secret("abcdefgh") == "ab****gh"
+
+    def test_load_dotenv_file(self, tmp_path):
+        env_file = tmp_path / "test.env"
+        env_file.write_text(
+            "# Comment line\n"
+            "KEY1=value1\n"
+            "KEY2=\"quoted_value\"\n"
+            "KEY3='single_quoted'\n"
+            "INVALID_LINE\n"
+            "KEY4=val with spaces\n"
+        )
+        parsed = load_dotenv_file(str(env_file))
+        assert parsed["KEY1"] == "value1"
+        assert parsed["KEY2"] == "quoted_value"
+        assert parsed["KEY3"] == "single_quoted"
+        assert parsed["KEY4"] == "val with spaces"
+        assert "INVALID_LINE" not in parsed
+
+        # Non-existent file
+        assert load_dotenv_file(str(tmp_path / "non_existent.env")) == {}
+
 
 
 class TestLoadConfig:

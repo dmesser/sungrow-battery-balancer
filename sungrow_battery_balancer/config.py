@@ -110,6 +110,30 @@ def mask_secret(secret: str | None) -> str:
     return f"{secret[:2]}****{secret[-2:]}"
 
 
+def load_dotenv_file(filepath: str = ".env") -> dict[str, str]:
+    """Parse a simple .env file into key-value pairs without external dependencies."""
+    env_vars: dict[str, str] = {}
+    if not os.path.exists(filepath):
+        return env_vars
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip()
+                if (v.startswith('"') and v.endswith('"')) or (
+                    v.startswith("'") and v.endswith("'")
+                ):
+                    v = v[1:-1]
+                env_vars[k] = v
+    except OSError:  # pragma: no cover
+        pass
+    return env_vars
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI ArgumentParser with full configuration switches."""
     parser = argparse.ArgumentParser(
@@ -123,6 +147,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Operational Modes
     mode_group = parser.add_argument_group("Execution Modes")
+    mode_group.add_argument(
+        "--env-file",
+        type=str,
+        dest="env_file",
+        default=".env",
+        metavar="PATH",
+        help="Path to .env configuration file (default: .env).",
+    )
     mode_group.add_argument(
         "-1",
         "--one-shot",
@@ -324,11 +356,14 @@ def load_config(
     CLI arguments take precedence over environment variables.
     Validates required settings and raises SystemExit with human-friendly message if missing.
     """
-    if environ is None:
-        environ = os.environ  # pragma: no cover
-
     parser = build_parser()
     parsed_args = parser.parse_args(args)
+
+    if environ is None:
+        dotenv_path = parsed_args.env_file or ".env"
+        file_env = load_dotenv_file(dotenv_path)
+        environ = {**file_env, **dict(os.environ)}
+
 
     # Helper to resolve value: CLI > Env > Default
     def get_val(cli_val, env_key: str, default=None):
